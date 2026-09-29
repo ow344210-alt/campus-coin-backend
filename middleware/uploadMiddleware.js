@@ -1,12 +1,33 @@
 const multer = require('multer');
 const path = require('path');
+const os = require('os');
 const fs = require('fs');
 const crypto = require('crypto');
 
-const uploadDir = path.join(__dirname, '..', 'uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
+let resolvedUploadDir = null;
+
+const resolveUploadDir = () => {
+  if (resolvedUploadDir) return resolvedUploadDir;
+
+  const candidates = [
+    process.env.UPLOAD_DIR,
+    path.join(__dirname, '..', 'uploads'),
+    path.join(os.tmpdir(), 'campuscoin-uploads'),
+  ].filter(Boolean);
+
+  for (const dir of candidates) {
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+      fs.accessSync(dir, fs.constants.W_OK);
+      resolvedUploadDir = dir;
+      return resolvedUploadDir;
+    } catch (err) {
+      console.warn(`[upload] "${dir}" is not writable: ${err.code || err.message}`);
+    }
+  }
+
+  throw new Error('No writable upload directory is available');
+};
 
 const badRequest = (message) => {
   const err = new Error(message);
@@ -15,7 +36,13 @@ const badRequest = (message) => {
 };
 
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadDir),
+  destination: (req, file, cb) => {
+    try {
+      cb(null, resolveUploadDir());
+    } catch (err) {
+      cb(err);
+    }
+  },
   filename: (req, file, cb) => {
     const uniqueSuffix = `${Date.now()}-${crypto.randomBytes(8).toString('hex')}`;
     cb(null, `${uniqueSuffix}.csv`);

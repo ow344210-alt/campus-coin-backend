@@ -6,4 +6,7 @@ backend.zip
 node_modules/
 dist/
 build/
+uploads/
+.vercel/
 *.log
+
